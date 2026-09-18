@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RRB GK Daily Practice</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <div class="max-w-3xl mx-auto px-4 py-8 w-full flex-grow">
+        <!-- Header -->
+        <header class="bg-white shadow-sm rounded-2xl p-6 mb-6 border border-slate-100 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-black text-blue-600">RRB GK Practice App</h1>
+                <p id="day-title" class="text-sm font-medium text-slate-500 mt-1">Loading schedule...</p>
+            </div>
+            <div id="streak-badge" class="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-sm font-bold border border-blue-100">
+                Day 1 of 13
+            </div>
+        </header>
+
+        <!-- Quiz Container -->
+        <main id="quiz-container" class="space-y-6">
+            <!-- Dynamic questions will load here -->
+        </main>
+
+        <!-- Submit & Analysis Section -->
+        <div class="mt-8">
+            <button id="submit-btn" onclick="submitQuiz()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg transition duration-200">
+                Submit Answers & View Analysis
+            </button>
+        </div>
+
+        <!-- Analysis Card (Hidden by Default) -->
+        <div id="analysis-card" class="hidden mt-8 bg-white shadow-xl rounded-2xl p-6 border border-slate-100 space-y-4">
+            <h2 class="text-xl font-bold text-slate-800">Performance Analysis</h2>
+            <div id="score-summary" class="text-lg font-semibold text-blue-600"></div>
+            <p id="analysis-feedback" class="text-slate-600 text-sm leading-relaxed"></p>
+            <button onclick="nextDay()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition duration-200">
+                Continue to Next Day 🚀
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 text-xs text-slate-400">
+        RRB General Knowledge Chapterwise Solved Papers • Automated Daily Practice
+    </footer>
+
+    <script>
+        let appData = null;
+        let currentDayIndex = 0;
+
+        async function loadAppData() {
+            try {
+                const response = await fetch('https://api.jsonbin.io/v3/b/6aacb9acffd5d16053147bd5/latest');
+                const jsonResponse = await response.json();
+                
+                // Extract record object from JSONbin response structure
+                appData = jsonResponse.record;
+                
+                // Get saved progress from local storage
+                const savedDay = localStorage.getItem('rrb_current_day');
+                if (savedDay !== null) {
+                    currentDayIndex = parseInt(savedDay, 10);
+                }
+                
+                renderDay();
+            } catch (error) {
+                document.getElementById('quiz-container').innerHTML = `
+                    <div class="bg-red-50 text-red-700 p-4 rounded-xl border border-red-200 text-sm">
+                        Failed to load questions from JSONbin. Please check your network connection or bin ID!
+                    </div>
+                `;
+            }
+        }
+
+        function renderDay() {
+            if (!appData || !appData.schedule) return;
+
+            // Handle recycling back to Day 1 if exceeding total cycle days
+            const scheduleArray = Array.isArray(appData.schedule) ? appData.schedule : Object.values(appData.schedule);
+
+            if (currentDayIndex >= scheduleArray.length) {
+                currentDayIndex = 0;
+                localStorage.setItem('rrb_current_day', currentDayIndex);
+            }
+
+            const dayData = scheduleArray[currentDayIndex];
+            
+            // Update header info
+            document.getElementById('day-title').innerText = `${dayData.subject} • ${dayData.mainTopic}`;
+            document.getElementById('streak-badge').innerText = `Day ${dayData.dayNumber} of ${appData.totalCycleDays}`;
+
+            // Render subtopics & questions
+            let html = '';
+            
+            // Subtopics banner
+            html += `
+                <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-xs font-semibold text-blue-800">
+                    Today's Subtopics: ${dayData.subtopics.join(' | ')}
+                </div>
+            `;
+
+            // Questions loop
+            dayData.questions.forEach((q, idx) => {
+                html += `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 question-card" data-qid="${q.id}" data-answer="${q.answer}">
+                        <p class="font-bold text-slate-800 text-base"><span class="text-blue-600 mr-2">Q${idx + 1}.</span>${q.question}</p>
+                        <div class="space-y-2">
+                `;
+                
+                q.options.forEach((opt, optIdx) => {
+                    const optLetter = ['Option A', 'Option B', 'Option C', 'Option D'][optIdx];
+                    html += `
+                        <label class="flex items-center space-x-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer transition">
+                            <input type="radio" name="question-${q.id}" value="${optLetter}" class="text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span class="text-sm text-slate-700 font-medium">${opt}</span>
+                        </label>
+                    `;
+                });
+
+                html += `</div></div>`;
+            });
+
+            document.getElementById('quiz-container').innerHTML = html;
+            document.getElementById('analysis-card').classList.add('hidden');
+            document.getElementById('submit-btn').classList.remove('hidden');
+        }
+
+        function submitQuiz() {
+            const cards = document.querySelectorAll('.question-card');
+            let score = 0;
+            let total = cards.length;
+
+            cards.forEach(card => {
+                const qId = card.getAttribute('data-qid');
+                const correctAnswer = card.getAttribute('data-answer');
+                const selectedOption = card.querySelector(`input[name="question-${qId}"]:checked`);
+
+                if (selectedOption && selectedOption.value === correctAnswer) {
+                    score++;
+                    card.classList.add('border-emerald-200', 'bg-emerald-50/30');
+                } else {
+                    card.classList.add('border-rose-200', 'bg-rose-50/30');
+                }
+            });
+
+            // Display Analysis
+            document.getElementById('score-summary').innerText = `You scored ${score} out of ${total}`;
+            document.getElementById('analysis-feedback').innerText = score === total 
+                ? "Outstanding performance! You have mastered today's subtopics completely." 
+                : "Good effort! Review the highlighted incorrect questions to strengthen your concepts before moving forward.";
+            
+            document.getElementById('analysis-card').classList.remove('hidden');
+            document.getElementById('submit-btn').classList.add('hidden');
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+
+        function nextDay() {
+            currentDayIndex++;
+            localStorage.setItem('rrb_current_day', currentDayIndex);
+            loadAppData();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        loadAppData();
+    </script>
+</body>
+</html>
